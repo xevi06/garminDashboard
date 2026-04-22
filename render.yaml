@@ -1,38 +1,10 @@
 services:
-  # ── Backend: FastAPI ────────────────────────────────────────────────────────
   - type: web
-    name: garmindash-api
+    name: garmindash
     env: python
     region: frankfurt
-    plan: free
-    rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    startCommand: streamlit run streamlit_app.py --server.port $PORT --server.address 0.0.0.0
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.0"
-      # Optional: comma-separated list of allowed origins.
-      # Leave unset to allow all origins (fine for Bearer-token auth).
-      - key: ALLOWED_ORIGINS
-        value: ""
-
-  # ── Frontend: React/Vite static site ───────────────────────────────────────
-  - type: web
-    name: garmindash-web
-    env: static
-    rootDir: frontend
-    buildCommand: sh build-render.sh
-    staticPublishPath: ./dist
-    routes:
-      # All paths → index.html so React Router handles client-side navigation
-      - type: rewrite
-        source: /*
-        destination: /index.html
-    envVars:
-      # Render injects the backend's public hostname; build-render.sh turns it
-      # into the full VITE_API_URL before running `npm run build`.
-      - key: BACKEND_HOST
-        fromService:
-          name: garmindash-api
-          type: web
-          property: host
