@@ -12,10 +12,21 @@ from cache import cache_get, cache_set
 
 app = FastAPI(title="Garmin Dashboard API", version="1.0.0")
 
+# ALLOWED_ORIGINS env var: comma-separated list of allowed origins.
+# When unset (production default) we allow all origins with credentials=False,
+# which is correct for Bearer-token auth (tokens live in headers, not cookies).
+_raw = os.getenv("ALLOWED_ORIGINS", "")
+if _raw.strip():
+    _origins = [o.strip() for o in _raw.split(",") if o.strip()]
+    _credentials = True
+else:
+    _origins = ["*"]
+    _credentials = False
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
-    allow_credentials=True,
+    allow_origins=_origins,
+    allow_credentials=_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

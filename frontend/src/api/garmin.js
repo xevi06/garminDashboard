@@ -1,4 +1,6 @@
-const BASE_URL = "http://localhost:8000/api";
+// In production VITE_API_URL is injected at build time by build-render.sh.
+// In local dev the Vite proxy forwards /api → localhost:8000 (see vite.config.js).
+const BASE_URL = import.meta.env.VITE_API_URL || "/api";
 
 function getToken() {
   return localStorage.getItem("garmin_token");
