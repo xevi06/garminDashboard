@@ -1,8 +1,10 @@
 # Python
+.venv*/
+__pycache__/
+*.pyc
+*.pyo
 backend/.venv/
 backend/__pycache__/
-backend/*.pyc
-backend/*.pyo
 *.egg-info/
 dist/
 build/
