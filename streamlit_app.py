@@ -521,7 +521,7 @@ def page_tabla(client, uid, start, end):
     level = st.radio("nivel", ["Día", "Semana", "Mes", "Año"],
                      horizontal=True, label_visibility="collapsed")
 
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     with c1:
         bike_cols = st.multiselect("🚴 Ciclismo", ["Tiempo", "Km", "Desnivel"],
                                    default=["Tiempo", "Km", "Desnivel"])
@@ -530,12 +530,16 @@ def page_tabla(client, uid, start, end):
                                    default=["Tiempo", "Km", "Desnivel"])
     with c3:
         swim_cols = st.multiselect("🏊 Natación", ["Tiempo", "Km"], default=[])
+    with c4:
+        step_cols = st.multiselect("👣 Pasos", ["Pasos", "Km", "Calorías"],
+                                   default=["Pasos"])
 
     s, e = start.isoformat(), end.isoformat()
     with st.spinner("Cargando datos…"):
         bike_data  = fetch_cycling(client, uid, s, e)  if bike_cols  else {"activities": []}
         run_data   = fetch_running(client, uid, s, e)  if run_cols   else {"activities": []}
         swim_data  = fetch_swimming(client, uid, s, e) if swim_cols  else {"activities": []}
+        step_data  = fetch_steps(client, uid, s, e)    if step_cols  else {"days": []}
 
     def period_key(date_str):
         d = pd.Timestamp(date_str)
@@ -567,9 +571,23 @@ def page_tabla(client, uid, start, end):
         )
         return base.join(grp, how="left")
 
+    def aggregate_steps(days):
+        base = pd.DataFrame({"Período": all_p}).set_index("Período")
+        if not days:
+            return base.assign(pasos=None, km=None, calorias=None)
+        df = pd.DataFrame(days)
+        df["_p"] = df["date"].apply(period_key)
+        grp = df.groupby("_p").agg(
+            pasos=("steps", "sum"),
+            km=("distanceKm", "sum"),
+            calorias=("calories", "sum"),
+        )
+        return base.join(grp, how="left")
+
     bike_agg  = aggregate(bike_data["activities"])
     run_agg   = aggregate(run_data["activities"])
     swim_agg  = aggregate(swim_data["activities"])
+    step_agg  = aggregate_steps(step_data["days"])
 
     num = {}
     if "Tiempo"   in bike_cols: num["🚴 Tiempo"]   = bike_agg["tiempo"]
@@ -580,6 +598,9 @@ def page_tabla(client, uid, start, end):
     if "Desnivel" in run_cols:  num["🏃 Desnivel"] = run_agg["desnivel"]
     if "Tiempo"   in swim_cols: num["🏊 Tiempo"]   = swim_agg["tiempo"]
     if "Km"       in swim_cols: num["🏊 Km"]       = swim_agg["km"]
+    if "Pasos"    in step_cols: num["👣 Pasos"]    = step_agg["pasos"]
+    if "Km"       in step_cols: num["👣 Km"]       = step_agg["km"]
+    if "Calorías" in step_cols: num["👣 Calorías"] = step_agg["calorias"]
 
     if not num:
         st.info("Selecciona al menos una métrica."); return
@@ -593,6 +614,8 @@ def page_tabla(client, uid, start, end):
         if "Tiempo"   in col: return fmt_dur(v)
         if "Km"       in col: return f"{v:.1f}"
         if "Desnivel" in col: return f"{v:.0f} m"
+        if "Pasos"    in col: return f"{int(v):,}".replace(",", ".")
+        if "Calorías" in col: return f"{v:.0f} kcal"
         return str(v)
 
     styler = tbl.style.format(
@@ -603,10 +626,12 @@ def page_tabla(client, uid, start, end):
     bike_c = [c for c in tbl.columns if "🚴" in c]
     run_c  = [c for c in tbl.columns if "🏃" in c]
     swim_c = [c for c in tbl.columns if "🏊" in c]
+    step_c = [c for c in tbl.columns if "👣" in c]
 
     if bike_c: styler = styler.background_gradient(subset=bike_c, cmap="Blues",   axis=0)
     if run_c:  styler = styler.background_gradient(subset=run_c,  cmap="Greens",  axis=0)
     if swim_c: styler = styler.background_gradient(subset=swim_c, cmap="Purples", axis=0)
+    if step_c: styler = styler.background_gradient(subset=step_c, cmap="Oranges", axis=0)
 
     st.dataframe(styler, use_container_width=True)
 
