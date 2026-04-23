@@ -150,19 +150,10 @@ def sidebar():
         )
         st.divider()
 
-        st.markdown("**Período**")
-        preset = st.selectbox(
-            "Período", ["7 días", "30 días", "90 días", "6 meses", "1 año", "Personalizado"],
-            index=2, label_visibility="collapsed",
-        )
         hoy = date.today()
-        dias = {"7 días": 7, "30 días": 30, "90 días": 90, "6 meses": 180, "1 año": 365}
-        if preset in dias:
-            end_date   = hoy
-            start_date = hoy - timedelta(days=dias[preset])
-        else:
-            start_date = st.date_input("Desde", hoy - timedelta(days=90))
-            end_date   = st.date_input("Hasta", hoy)
+        st.markdown("**Período**")
+        start_date = st.date_input("Desde", hoy - timedelta(days=90))
+        end_date   = st.date_input("Hasta", hoy)
 
         st.markdown("**Comparar con**")
         comp_sel = st.selectbox(
