@@ -48,6 +48,9 @@ class GarminClient:
         spd_kmh = round(spd * 3.6, 2) if spd else 0
         pace = round(1000 / spd / 60, 2) if spd else None
 
+        def _zone_min(key):
+            return round((act.get(key, 0) or 0) / 60, 1)
+
         return {
             "id": act.get("activityId"),
             "name": act.get("activityName", ""),
@@ -61,6 +64,11 @@ class GarminClient:
             "calories": calories,
             "avgPower": avg_power,
             "avgCadence": cadence,
+            "hrZ1Min": _zone_min("hrTimeInZone_1"),
+            "hrZ2Min": _zone_min("hrTimeInZone_2"),
+            "hrZ3Min": _zone_min("hrTimeInZone_3"),
+            "hrZ4Min": _zone_min("hrTimeInZone_4"),
+            "hrZ5Min": _zone_min("hrTimeInZone_5"),
         }
 
     def get_cycling_activities(self, start_date: str, end_date: str) -> dict:
