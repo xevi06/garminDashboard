@@ -618,6 +618,13 @@ def page_tabla(client, uid, start, end):
         if "Calorías" in col: return f"{v:.0f} kcal"
         return str(v)
 
+    # Append median to each column header as reference value
+    rename = {}
+    for col in tbl.columns:
+        med = tbl[col].median()
+        rename[col] = f"{col} ({_fmt(col, med)})" if pd.notna(med) and med > 0 else col
+    tbl = tbl.rename(columns=rename)
+
     styler = tbl.style.format(
         {col: (lambda v, c=col: _fmt(c, v)) for col in tbl.columns},
         na_rep="—",
