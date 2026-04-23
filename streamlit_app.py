@@ -523,7 +523,7 @@ def page_tabla(client, uid, start, end):
 
     _SPORT_OPTS = ["Tiempo", "Km", "Desnivel",
                    "FC media", "FC Z1", "FC Z2", "FC Z3", "FC Z4", "FC Z5",
-                   "Pot. media"]
+                   "Pot. media", "W/FC"]
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
@@ -587,7 +587,10 @@ def page_tabla(client, uid, start, end):
             hr_z4=("hrZ4Min", "sum"),
             hr_z5=("hrZ5Min", "sum"),
         )
-        return base.join(grp, how="left")
+        result = base.join(grp, how="left")
+        mask = result["pot_media"].notna() & result["fc_media"].notna() & (result["fc_media"] > 0)
+        result["w_fc"] = (result["pot_media"] / result["fc_media"]).where(mask).round(2)
+        return result
 
     def aggregate_steps(days):
         base = pd.DataFrame({"Período": all_p}).set_index("Período")
@@ -619,6 +622,7 @@ def page_tabla(client, uid, start, end):
         if "FC Z4"     in cols: num[f"{prefix} FC Z4"]     = agg["hr_z4"]
         if "FC Z5"     in cols: num[f"{prefix} FC Z5"]     = agg["hr_z5"]
         if "Pot. media" in cols: num[f"{prefix} Pot. media"] = agg["pot_media"]
+        if "W/FC"       in cols: num[f"{prefix} W/FC"]       = agg["w_fc"]
     if "Tiempo"   in swim_cols: num["🏊 Tiempo"]   = swim_agg["tiempo"]
     if "Km"       in swim_cols: num["🏊 Km"]       = swim_agg["km"]
     if "Pasos"    in step_cols: num["👣 Pasos"]    = step_agg["pasos"]
@@ -639,9 +643,10 @@ def page_tabla(client, uid, start, end):
         if "Desnivel"  in col: return f"{v:.0f} m"
         if "Pasos"     in col: return f"{int(v):,}".replace(",", ".")
         if "Calorías"  in col: return f"{v:.0f} kcal"
-        if "FC Z"      in col: return fmt_dur(v)        # zone time in minutes
+        if "FC Z"      in col: return fmt_dur(v)
         if "FC"        in col: return f"{int(v)} bpm"
         if "Pot. media" in col: return f"{int(v)} W"
+        if "W/FC"      in col: return f"{v:.2f}"
         return str(v)
 
     # Append median to each column header as reference value
