@@ -571,26 +571,44 @@ def page_tabla(client, uid, start, end):
     run_agg   = aggregate(run_data["activities"])
     swim_agg  = aggregate(swim_data["activities"])
 
-    def _t(v):  return fmt_dur(v) if pd.notna(v) and v else "—"
-    def _km(v): return f"{v:.1f}" if pd.notna(v) and v else "—"
-    def _el(v): return f"{v:.0f} m" if pd.notna(v) and v else "—"
+    num = {}
+    if "Tiempo"   in bike_cols: num["🚴 Tiempo"]   = bike_agg["tiempo"]
+    if "Km"       in bike_cols: num["🚴 Km"]       = bike_agg["km"]
+    if "Desnivel" in bike_cols: num["🚴 Desnivel"] = bike_agg["desnivel"]
+    if "Tiempo"   in run_cols:  num["🏃 Tiempo"]   = run_agg["tiempo"]
+    if "Km"       in run_cols:  num["🏃 Km"]       = run_agg["km"]
+    if "Desnivel" in run_cols:  num["🏃 Desnivel"] = run_agg["desnivel"]
+    if "Tiempo"   in swim_cols: num["🏊 Tiempo"]   = swim_agg["tiempo"]
+    if "Km"       in swim_cols: num["🏊 Km"]       = swim_agg["km"]
 
-    cols = {}
-    if "Tiempo"   in bike_cols: cols["🚴 Tiempo"]   = bike_agg["tiempo"].map(_t)
-    if "Km"       in bike_cols: cols["🚴 Km"]       = bike_agg["km"].map(_km)
-    if "Desnivel" in bike_cols: cols["🚴 Desnivel"] = bike_agg["desnivel"].map(_el)
-    if "Tiempo"   in run_cols:  cols["🏃 Tiempo"]   = run_agg["tiempo"].map(_t)
-    if "Km"       in run_cols:  cols["🏃 Km"]       = run_agg["km"].map(_km)
-    if "Desnivel" in run_cols:  cols["🏃 Desnivel"] = run_agg["desnivel"].map(_el)
-    if "Tiempo"   in swim_cols: cols["🏊 Tiempo"]   = swim_agg["tiempo"].map(_t)
-    if "Km"       in swim_cols: cols["🏊 Km"]       = swim_agg["km"].map(_km)
-
-    if not cols:
+    if not num:
         st.info("Selecciona al menos una métrica."); return
 
-    tbl = pd.DataFrame(cols)
+    tbl = pd.DataFrame(num)
     tbl.index.name = "Período"
-    st.dataframe(tbl, use_container_width=True)
+    tbl = tbl.where(tbl > 0)  # zero → NaN: shows "—" and gets no heatmap colour
+
+    def _fmt(col, v):
+        if pd.isna(v): return "—"
+        if "Tiempo"   in col: return fmt_dur(v)
+        if "Km"       in col: return f"{v:.1f}"
+        if "Desnivel" in col: return f"{v:.0f} m"
+        return str(v)
+
+    styler = tbl.style.format(
+        {col: (lambda v, c=col: _fmt(c, v)) for col in tbl.columns},
+        na_rep="—",
+    )
+
+    bike_c = [c for c in tbl.columns if "🚴" in c]
+    run_c  = [c for c in tbl.columns if "🏃" in c]
+    swim_c = [c for c in tbl.columns if "🏊" in c]
+
+    if bike_c: styler = styler.background_gradient(subset=bike_c, cmap="Blues",   axis=0)
+    if run_c:  styler = styler.background_gradient(subset=run_c,  cmap="Greens",  axis=0)
+    if swim_c: styler = styler.background_gradient(subset=swim_c, cmap="Purples", axis=0)
+
+    st.dataframe(styler, use_container_width=True)
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 if st.session_state.client is None:
