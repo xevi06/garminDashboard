@@ -101,6 +101,10 @@ def fetch_steps(_client, uid, s, e):
     return _client.get_daily_steps(s, e)
 
 @st.cache_data(ttl=300)
+def fetch_swimming(_client, uid, s, e):
+    return _client.get_swimming_activities(s, e)
+
+@st.cache_data(ttl=300)
 def fetch_summary(_client, uid):
     return _client.get_summary()
 
@@ -145,7 +149,7 @@ def sidebar():
 
         page = st.radio(
             "Página",
-            ["📊 Resumen", "🚴 Ciclismo", "🏃 Running", "👣 Pasos"],
+            ["📊 Resumen", "🚴 Ciclismo", "🏃 Running", "👣 Pasos", "📋 Tabla"],
             label_visibility="collapsed",
         )
         st.divider()
@@ -509,6 +513,85 @@ def page_steps(client, uid, start, end, cmode):
     tbl = tbl[["Fecha","Pasos","Objetivo","% Obj.","Dist. (km)","Cal.","T. activo (min)"]]
     st.dataframe(tbl, use_container_width=True, hide_index=True)
 
+# ── Dynamic Table ─────────────────────────────────────────────────────────────
+def page_tabla(client, uid, start, end):
+    st.title("📋 Tabla dinámica")
+
+    st.markdown("**Nivel de agrupación**")
+    level = st.radio("nivel", ["Día", "Semana", "Mes", "Año"],
+                     horizontal=True, label_visibility="collapsed")
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        bike_cols = st.multiselect("🚴 Ciclismo", ["Tiempo", "Km", "Desnivel"],
+                                   default=["Tiempo", "Km", "Desnivel"])
+    with c2:
+        run_cols  = st.multiselect("🏃 Running",  ["Tiempo", "Km", "Desnivel"],
+                                   default=["Tiempo", "Km", "Desnivel"])
+    with c3:
+        swim_cols = st.multiselect("🏊 Natación", ["Tiempo", "Km"], default=[])
+
+    s, e = start.isoformat(), end.isoformat()
+    with st.spinner("Cargando datos…"):
+        bike_data  = fetch_cycling(client, uid, s, e)  if bike_cols  else {"activities": []}
+        run_data   = fetch_running(client, uid, s, e)  if run_cols   else {"activities": []}
+        swim_data  = fetch_swimming(client, uid, s, e) if swim_cols  else {"activities": []}
+
+    def period_key(date_str):
+        d = pd.Timestamp(date_str)
+        if level == "Día":    return date_str
+        if level == "Semana":
+            iso = d.isocalendar()
+            return f"{iso.year}-S{iso.week:02d}"
+        if level == "Mes":   return f"{d.year}-{d.month:02d}"
+        return str(d.year)
+
+    all_p = []
+    cur = start
+    while cur <= end:
+        k = period_key(cur.isoformat())
+        if k not in all_p:
+            all_p.append(k)
+        cur += timedelta(days=1)
+
+    def aggregate(activities):
+        base = pd.DataFrame({"Período": all_p}).set_index("Período")
+        if not activities:
+            return base.assign(tiempo=None, km=None, desnivel=None)
+        df = pd.DataFrame(activities)
+        df["_p"] = df["date"].apply(period_key)
+        grp = df.groupby("_p").agg(
+            tiempo=("durationMin", "sum"),
+            km=("distanceKm", "sum"),
+            desnivel=("elevationGainM", "sum"),
+        )
+        return base.join(grp, how="left")
+
+    bike_agg  = aggregate(bike_data["activities"])
+    run_agg   = aggregate(run_data["activities"])
+    swim_agg  = aggregate(swim_data["activities"])
+
+    def _t(v):  return fmt_dur(v) if pd.notna(v) and v else "—"
+    def _km(v): return f"{v:.1f}" if pd.notna(v) and v else "—"
+    def _el(v): return f"{v:.0f} m" if pd.notna(v) and v else "—"
+
+    cols = {}
+    if "Tiempo"   in bike_cols: cols["🚴 Tiempo"]   = bike_agg["tiempo"].map(_t)
+    if "Km"       in bike_cols: cols["🚴 Km"]       = bike_agg["km"].map(_km)
+    if "Desnivel" in bike_cols: cols["🚴 Desnivel"] = bike_agg["desnivel"].map(_el)
+    if "Tiempo"   in run_cols:  cols["🏃 Tiempo"]   = run_agg["tiempo"].map(_t)
+    if "Km"       in run_cols:  cols["🏃 Km"]       = run_agg["km"].map(_km)
+    if "Desnivel" in run_cols:  cols["🏃 Desnivel"] = run_agg["desnivel"].map(_el)
+    if "Tiempo"   in swim_cols: cols["🏊 Tiempo"]   = swim_agg["tiempo"].map(_t)
+    if "Km"       in swim_cols: cols["🏊 Km"]       = swim_agg["km"].map(_km)
+
+    if not cols:
+        st.info("Selecciona al menos una métrica."); return
+
+    tbl = pd.DataFrame(cols)
+    tbl.index.name = "Período"
+    st.dataframe(tbl, use_container_width=True)
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 if st.session_state.client is None:
     login_page()
@@ -521,3 +604,4 @@ else:
     elif page == "🚴 Ciclismo": page_cycling(client, uid, start_date, end_date, cmode)
     elif page == "🏃 Running":  page_running(client, uid, start_date, end_date, cmode)
     elif page == "👣 Pasos":    page_steps(client, uid, start_date, end_date, cmode)
+    elif page == "📋 Tabla":    page_tabla(client, uid, start_date, end_date)

@@ -98,6 +98,18 @@ class GarminClient:
             },
         }
 
+    def get_swimming_activities(self, start_date: str, end_date: str) -> dict:
+        raw = self._api.get_activities_by_date(start_date, end_date, activitytype="swimming")
+        acts = sorted([self._norm(a) for a in raw], key=lambda x: x["date"])
+        return {
+            "activities": acts,
+            "summary": {
+                "totalActivities": len(acts),
+                "totalDistanceKm": round(sum(a["distanceKm"] for a in acts), 2),
+                "totalTimeMin": round(sum(a["durationMin"] for a in acts), 1),
+            },
+        }
+
     def get_daily_steps(self, start_date: str, end_date: str) -> dict:
         start = datetime.strptime(start_date, "%Y-%m-%d").date()
         end = datetime.strptime(end_date, "%Y-%m-%d").date()
