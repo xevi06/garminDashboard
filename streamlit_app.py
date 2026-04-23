@@ -221,10 +221,10 @@ def page_tabla(client, uid, start, end):
         if "Desnivel"   in col: return f"{v:.0f} m"
         if "Pasos"      in col: return f"{int(v):,}".replace(",", ".")
         if "Calorías"   in col: return f"{v:.0f} kcal"
+        if "W/FC"       in col: return f"{v:.2f}"   # antes que "FC"
         if "FC Z"       in col: return fmt_dur(v)
         if "FC"         in col: return f"{int(v)} bpm"
         if "Pot. media" in col: return f"{int(v)} W"
-        if "W/FC"       in col: return f"{v:.2f}"
         return str(v)
 
     # Append median to each column header as reference value
