@@ -51,12 +51,12 @@ def login_page():
     _, col, _ = st.columns([1, 1.1, 1])
     with col:
         st.markdown("## 🏃 GarminDash")
-        st.caption("Dashboard de entrenamiento para Garmin Connect.")
+        st.markdown("Introduce tus credenciales de **Garmin Connect** (las mismas que usas en la app o en connect.garmin.com).")
         st.divider()
         with st.form("login"):
-            email    = st.text_input("Email", placeholder="tu@email.com")
-            password = st.text_input("Contraseña", type="password")
-            ok = st.form_submit_button("Conectar", use_container_width=True, type="primary")
+            email    = st.text_input("Email de Garmin Connect", placeholder="tu@email.com")
+            password = st.text_input("Contraseña de Garmin Connect", type="password")
+            ok = st.form_submit_button("Conectar con Garmin", use_container_width=True, type="primary")
         if ok:
             if not email or not password:
                 st.error("Introduce email y contraseña.")
