@@ -24,6 +24,11 @@ def fmt_dur(m):
         return "—"
     return f"{int(m // 60)}h {int(m % 60)}m" if m >= 60 else f"{int(m)}m"
 
+def fmt_pace(p):
+    if not p:
+        return "—"
+    return f"{int(p)}:{int((p % 1) * 60):02d} /km"
+
 # ── Cached data fetchers ──────────────────────────────────────────────────────
 @st.cache_data(ttl=300)
 def fetch_cycling(_client, uid, s, e):
@@ -90,6 +95,48 @@ def sidebar():
 
     return start_date, end_date
 
+# ── Column option lists ───────────────────────────────────────────────────────
+_BIKE_OPTS = [
+    "Tiempo", "Km", "Desnivel",
+    "Vel. media", "Vel. máx",
+    "FC media", "FC máx", "FC Z1", "FC Z2", "FC Z3", "FC Z4", "FC Z5",
+    "Pot. media", "Pot. norm.", "Pot. máx", "W/FC",
+    "TSS", "IF", "Cadencia",
+]
+
+_RUN_OPTS = [
+    "Tiempo", "Km", "Desnivel",
+    "Ritmo medio", "Ritmo mejor",
+    "Vel. media", "Vel. máx",
+    "FC media", "FC máx", "FC Z1", "FC Z2", "FC Z3", "FC Z4", "FC Z5",
+    "Pot. media", "W/FC",
+    "Cadencia", "Zancada", "Oscilación V.", "Cont. suelo", "Ratio V.",
+]
+
+# Maps multiselect label → aggregate field name
+_BIKE_MAP = {
+    "Tiempo": "tiempo",      "Km": "km",             "Desnivel": "desnivel",
+    "Vel. media": "vel_med", "Vel. máx": "vel_max",
+    "FC media": "fc_med",    "FC máx": "fc_max",
+    "FC Z1": "hr_z1",        "FC Z2": "hr_z2",       "FC Z3": "hr_z3",
+    "FC Z4": "hr_z4",        "FC Z5": "hr_z5",
+    "Pot. media": "pot_med", "Pot. norm.": "pot_norm","Pot. máx": "pot_max",
+    "W/FC": "w_fc",          "TSS": "tss",            "IF": "if_",
+    "Cadencia": "cadencia",
+}
+
+_RUN_MAP = {
+    "Tiempo": "tiempo",        "Km": "km",             "Desnivel": "desnivel",
+    "Ritmo medio": "ritmo_med","Ritmo mejor": "ritmo_best",
+    "Vel. media": "vel_med",   "Vel. máx": "vel_max",
+    "FC media": "fc_med",      "FC máx": "fc_max",
+    "FC Z1": "hr_z1",          "FC Z2": "hr_z2",       "FC Z3": "hr_z3",
+    "FC Z4": "hr_z4",          "FC Z5": "hr_z5",
+    "Pot. media": "pot_med",   "W/FC": "w_fc",
+    "Cadencia": "cadencia",    "Zancada": "zancada",
+    "Oscilación V.": "vert_osc","Cont. suelo": "gct",  "Ratio V.": "vert_ratio",
+}
+
 # ── Dynamic Table ─────────────────────────────────────────────────────────────
 def page_tabla(client, uid, start, end):
     st.title("📋 Tabla dinámica")
@@ -98,16 +145,12 @@ def page_tabla(client, uid, start, end):
     level = st.radio("nivel", ["Día", "Semana", "Mes", "Año"],
                      horizontal=True, label_visibility="collapsed")
 
-    _SPORT_OPTS = ["Tiempo", "Km", "Desnivel",
-                   "FC media", "FC Z1", "FC Z2", "FC Z3", "FC Z4", "FC Z5",
-                   "Pot. media", "W/FC"]
-
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        bike_cols = st.multiselect("🚴 Ciclismo", _SPORT_OPTS,
+        bike_cols = st.multiselect("🚴 Ciclismo", _BIKE_OPTS,
                                    default=["Tiempo", "Km", "Desnivel"])
     with c2:
-        run_cols  = st.multiselect("🏃 Running",  _SPORT_OPTS,
+        run_cols  = st.multiselect("🏃 Running",  _RUN_OPTS,
                                    default=["Tiempo", "Km", "Desnivel"])
     with c3:
         swim_cols = st.multiselect("🏊 Natación", ["Tiempo", "Km"], default=[])
@@ -117,10 +160,10 @@ def page_tabla(client, uid, start, end):
 
     s, e = start.isoformat(), end.isoformat()
     with st.spinner("Cargando datos…"):
-        bike_data  = fetch_cycling(client, uid, s, e)  if bike_cols  else {"activities": []}
-        run_data   = fetch_running(client, uid, s, e)  if run_cols   else {"activities": []}
-        swim_data  = fetch_swimming(client, uid, s, e) if swim_cols  else {"activities": []}
-        step_data  = fetch_steps(client, uid, s, e)    if step_cols  else {"days": []}
+        bike_data = fetch_cycling(client, uid, s, e)  if bike_cols  else {"activities": []}
+        run_data  = fetch_running(client, uid, s, e)  if run_cols   else {"activities": []}
+        swim_data = fetch_swimming(client, uid, s, e) if swim_cols  else {"activities": []}
+        step_data = fetch_steps(client, uid, s, e)    if step_cols  else {"days": []}
 
     def period_key(date_str):
         d = pd.Timestamp(date_str)
@@ -142,69 +185,89 @@ def page_tabla(client, uid, start, end):
     def aggregate(activities):
         base = pd.DataFrame({"Período": all_p}).set_index("Período")
         if not activities:
-            return base.assign(tiempo=None, km=None, desnivel=None,
-                               fc_media=None, pot_media=None,
-                               hr_z1=None, hr_z2=None, hr_z3=None, hr_z4=None, hr_z5=None)
+            return base
+
         df = pd.DataFrame(activities)
         df["_p"] = df["date"].apply(period_key)
 
-        def _mean_pos(s):
+        def _mean(s):
             v = s[s > 0]
-            return round(float(v.mean()), 0) if len(v) else None
+            return float(v.mean()) if len(v) else None
+        def _max(s):
+            v = s[s > 0]
+            return float(v.max()) if len(v) else None
+        def _min(s):
+            v = s[s > 0]
+            return float(v.min()) if len(v) else None
+        def _sum_nn(s):
+            v = s.dropna()
+            return float(v.sum()) if len(v) else None
 
         grp = df.groupby("_p").agg(
-            tiempo=("durationMin", "sum"),
-            km=("distanceKm", "sum"),
-            desnivel=("elevationGainM", "sum"),
-            fc_media=("avgHr",    _mean_pos),
-            pot_media=("avgPower", _mean_pos),
-            hr_z1=("hrZ1Min", "sum"),
-            hr_z2=("hrZ2Min", "sum"),
-            hr_z3=("hrZ3Min", "sum"),
-            hr_z4=("hrZ4Min", "sum"),
-            hr_z5=("hrZ5Min", "sum"),
+            tiempo     =("durationMin",           "sum"),
+            km         =("distanceKm",            "sum"),
+            desnivel   =("elevationGainM",        "sum"),
+            vel_med    =("avgSpeedKmh",           _mean),
+            vel_max    =("maxSpeedKmh",           _max),
+            ritmo_med  =("avgPaceMinKm",          _mean),
+            ritmo_best =("avgPaceMinKm",          _min),
+            fc_med     =("avgHr",                 _mean),
+            fc_max     =("maxHr",                 _max),
+            pot_med    =("avgPower",              _mean),
+            pot_norm   =("normPower",             _mean),
+            pot_max    =("maxPower",              _max),
+            tss        =("tss",                   _sum_nn),
+            if_        =("intensityFactor",       _mean),
+            cadencia   =("avgCadence",            _mean),
+            zancada    =("avgStrideLength",       _mean),
+            vert_osc   =("avgVerticalOscillation",_mean),
+            gct        =("avgGroundContactTime",  _mean),
+            vert_ratio =("avgVerticalRatio",      _mean),
+            hr_z1      =("hrZ1Min",               "sum"),
+            hr_z2      =("hrZ2Min",               "sum"),
+            hr_z3      =("hrZ3Min",               "sum"),
+            hr_z4      =("hrZ4Min",               "sum"),
+            hr_z5      =("hrZ5Min",               "sum"),
         )
         result = base.join(grp, how="left")
-        mask = result["pot_media"].notna() & result["fc_media"].notna() & (result["fc_media"] > 0)
-        result["w_fc"] = (result["pot_media"] / result["fc_media"]).where(mask).round(2)
+        mask = result["pot_med"].notna() & result["fc_med"].notna() & (result["fc_med"] > 0)
+        result["w_fc"] = (result["pot_med"] / result["fc_med"]).where(mask).round(2)
         return result
 
     def aggregate_steps(days):
         base = pd.DataFrame({"Período": all_p}).set_index("Período")
         if not days:
-            return base.assign(pasos=None, km=None, calorias=None)
+            return base
         df = pd.DataFrame(days)
         df["_p"] = df["date"].apply(period_key)
         grp = df.groupby("_p").agg(
-            pasos=("steps", "sum"),
-            km=("distanceKm", "sum"),
-            calorias=("calories", "sum"),
+            pasos   =("steps",      "sum"),
+            km      =("distanceKm", "sum"),
+            calorias=("calories",   "sum"),
         )
         return base.join(grp, how="left")
 
-    bike_agg  = aggregate(bike_data["activities"])
-    run_agg   = aggregate(run_data["activities"])
-    swim_agg  = aggregate(swim_data["activities"])
-    step_agg  = aggregate_steps(step_data["days"])
+    bike_agg = aggregate(bike_data["activities"])
+    run_agg  = aggregate(run_data["activities"])
+    swim_agg = aggregate(swim_data["activities"])
+    step_agg = aggregate_steps(step_data["days"])
 
     num = {}
-    for prefix, agg, cols in [("🚴", bike_agg, bike_cols), ("🏃", run_agg, run_cols)]:
-        if "Tiempo"     in cols: num[f"{prefix} Tiempo"]     = agg["tiempo"]
-        if "Km"         in cols: num[f"{prefix} Km"]         = agg["km"]
-        if "Desnivel"   in cols: num[f"{prefix} Desnivel"]   = agg["desnivel"]
-        if "FC media"   in cols: num[f"{prefix} FC media"]   = agg["fc_media"]
-        if "FC Z1"      in cols: num[f"{prefix} FC Z1"]      = agg["hr_z1"]
-        if "FC Z2"      in cols: num[f"{prefix} FC Z2"]      = agg["hr_z2"]
-        if "FC Z3"      in cols: num[f"{prefix} FC Z3"]      = agg["hr_z3"]
-        if "FC Z4"      in cols: num[f"{prefix} FC Z4"]      = agg["hr_z4"]
-        if "FC Z5"      in cols: num[f"{prefix} FC Z5"]      = agg["hr_z5"]
-        if "Pot. media" in cols: num[f"{prefix} Pot. media"] = agg["pot_media"]
-        if "W/FC"       in cols: num[f"{prefix} W/FC"]       = agg["w_fc"]
-    if "Tiempo"   in swim_cols: num["🏊 Tiempo"]   = swim_agg["tiempo"]
-    if "Km"       in swim_cols: num["🏊 Km"]       = swim_agg["km"]
-    if "Pasos"    in step_cols: num["👣 Pasos"]    = step_agg["pasos"]
-    if "Km"       in step_cols: num["👣 Km"]       = step_agg["km"]
-    if "Calorías" in step_cols: num["👣 Calorías"] = step_agg["calorias"]
+    for prefix, agg, cols, col_map in [
+        ("🚴", bike_agg, bike_cols, _BIKE_MAP),
+        ("🏃", run_agg,  run_cols,  _RUN_MAP),
+    ]:
+        for label, field in col_map.items():
+            if label in cols and field in agg.columns:
+                num[f"{prefix} {label}"] = agg[field]
+
+    if "Tiempo" in swim_cols: num["🏊 Tiempo"] = swim_agg["tiempo"] if "tiempo" in swim_agg.columns else pd.Series(dtype=float)
+    if "Km"     in swim_cols: num["🏊 Km"]     = swim_agg["km"]     if "km"     in swim_agg.columns else pd.Series(dtype=float)
+
+    # aggregate_steps returns named columns directly
+    if "Pasos"    in step_cols and "pasos"    in step_agg.columns: num["👣 Pasos"]    = step_agg["pasos"]
+    if "Km"       in step_cols and "km"       in step_agg.columns: num["👣 Km"]       = step_agg["km"]
+    if "Calorías" in step_cols and "calorias" in step_agg.columns: num["👣 Calorías"] = step_agg["calorias"]
 
     if not num:
         st.info("Selecciona al menos una métrica."); return
@@ -216,15 +279,24 @@ def page_tabla(client, uid, start, end):
 
     def _fmt(col, v):
         if pd.isna(v): return "—"
-        if "Tiempo"     in col: return fmt_dur(v)
-        if "Km"         in col: return f"{v:.1f}"
-        if "Desnivel"   in col: return f"{v:.0f} m"
-        if "Pasos"      in col: return f"{int(v):,}".replace(",", ".")
-        if "Calorías"   in col: return f"{v:.0f} kcal"
-        if "W/FC"       in col: return f"{v:.2f}"   # antes que "FC"
-        if "FC Z"       in col: return fmt_dur(v)
-        if "FC"         in col: return f"{int(v)} bpm"
-        if "Pot. media" in col: return f"{int(v)} W"
+        if "Tiempo"       in col: return fmt_dur(v)
+        if "Km"           in col: return f"{v:.1f}"
+        if "Desnivel"     in col: return f"{v:.0f} m"
+        if "Pasos"        in col: return f"{int(v):,}".replace(",", ".")
+        if "Calorías"     in col: return f"{v:.0f} kcal"
+        if "W/FC"         in col: return f"{v:.2f}"
+        if "FC Z"         in col: return fmt_dur(v)
+        if "FC"           in col: return f"{int(v)} bpm"
+        if "Pot."         in col: return f"{int(v)} W"
+        if "Vel."         in col: return f"{v:.1f} km/h"
+        if "Ritmo"        in col: return fmt_pace(v)
+        if "TSS"          in col: return f"{int(v)}"
+        if "IF"           in col: return f"{v:.2f}"
+        if "Cadencia"     in col: return f"{int(v)} rpm"
+        if "Zancada"      in col: return f"{v:.2f} m"
+        if "Oscilación V."in col: return f"{v:.1f} cm"
+        if "Cont. suelo"  in col: return f"{int(v)} ms"
+        if "Ratio V."     in col: return f"{v:.1f}%"
         return str(v)
 
     # Append median to each column header as reference value

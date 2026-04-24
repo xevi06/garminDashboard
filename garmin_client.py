@@ -32,38 +32,61 @@ class GarminClient:
             return self.email
 
     def _norm(self, act: dict) -> dict:
-        start = act.get("startTimeLocal") or act.get("startTimeGMT", "")
-        dur_s = act.get("duration", 0) or 0
-        dist_m = act.get("distance", 0) or 0
-        spd = act.get("averageSpeed", 0) or 0
-        elev = act.get("elevationGain", 0) or 0
-        avg_hr = act.get("averageHR", 0) or 0
-        calories = act.get("calories", 0) or 0
+        start     = act.get("startTimeLocal") or act.get("startTimeGMT", "")
+        dur_s     = act.get("duration", 0) or 0
+        dist_m    = act.get("distance", 0) or 0
+        spd       = act.get("averageSpeed", 0) or 0
+        max_spd   = act.get("maxSpeed", 0) or 0
+        elev      = act.get("elevationGain", 0) or 0
+        avg_hr    = act.get("averageHR", 0) or 0
+        max_hr    = act.get("maxHR", 0) or 0
+        calories  = act.get("calories", 0) or 0
         avg_power = act.get("avgPower", None)
-        cadence = (act.get("averageBikingCadenceInRevPerMinute")
-                   or act.get("averageRunningCadenceInStepsPerMinute") or 0)
+        max_power = act.get("maxPower", None)
+        norm_power= act.get("normPower", None)
+        tss       = act.get("trainingStressScore", None)
+        if_factor = act.get("intensityFactor", None)
+        cadence   = (act.get("averageBikingCadenceInRevPerMinute")
+                     or act.get("averageRunningCadenceInStepsPerMinute") or 0)
+        stride    = act.get("avgStrideLength", None)
+        vert_osc  = act.get("avgVerticalOscillation", None)
+        gct       = act.get("avgGroundContactTime", None)
+        vert_ratio= act.get("avgVerticalRatio", None)
 
-        dist_km = round(dist_m / 1000, 2)
-        dur_min = round(dur_s / 60, 1)
-        spd_kmh = round(spd * 3.6, 2) if spd else 0
-        pace = round(1000 / spd / 60, 2) if spd else None
+        dist_km      = round(dist_m / 1000, 2)
+        dur_min      = round(dur_s / 60, 1)
+        spd_kmh      = round(spd * 3.6, 2) if spd else 0
+        max_spd_kmh  = round(max_spd * 3.6, 2) if max_spd else 0
+        pace         = round(1000 / spd / 60, 2) if spd else None
+        max_pace     = round(1000 / max_spd / 60, 2) if max_spd else None
 
         def _zone_min(key):
             return round((act.get(key, 0) or 0) / 60, 1)
 
         return {
-            "id": act.get("activityId"),
-            "name": act.get("activityName", ""),
-            "date": start[:10] if start else "",
-            "durationMin": dur_min,
-            "distanceKm": dist_km,
-            "avgSpeedKmh": spd_kmh,
-            "avgPaceMinKm": pace,
-            "elevationGainM": elev,
-            "avgHr": avg_hr,
-            "calories": calories,
-            "avgPower": avg_power,
-            "avgCadence": cadence,
+            "id":                  act.get("activityId"),
+            "name":                act.get("activityName", ""),
+            "date":                start[:10] if start else "",
+            "durationMin":         dur_min,
+            "distanceKm":          dist_km,
+            "avgSpeedKmh":         spd_kmh,
+            "maxSpeedKmh":         max_spd_kmh,
+            "avgPaceMinKm":        pace,
+            "maxPaceMinKm":        max_pace,
+            "elevationGainM":      elev,
+            "avgHr":               avg_hr,
+            "maxHr":               max_hr,
+            "calories":            calories,
+            "avgPower":            avg_power,
+            "maxPower":            max_power,
+            "normPower":           norm_power,
+            "tss":                 tss,
+            "intensityFactor":     if_factor,
+            "avgCadence":          cadence,
+            "avgStrideLength":     stride,
+            "avgVerticalOscillation": vert_osc,
+            "avgGroundContactTime":   gct,
+            "avgVerticalRatio":       vert_ratio,
             "hrZ1Min": _zone_min("hrTimeInZone_1"),
             "hrZ2Min": _zone_min("hrTimeInZone_2"),
             "hrZ3Min": _zone_min("hrTimeInZone_3"),
