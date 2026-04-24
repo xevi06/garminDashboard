@@ -311,15 +311,19 @@ def page_tabla(client, uid, start, end):
         na_rep="—",
     )
 
-    bike_c = [c for c in tbl.columns if "🚴" in c]
-    run_c  = [c for c in tbl.columns if "🏃" in c]
-    swim_c = [c for c in tbl.columns if "🏊" in c]
-    step_c = [c for c in tbl.columns if "👣" in c]
+    # Metrics where lower value = better performance → reversed colormap
+    _LOWER_BETTER = {"Ritmo", "Cont. suelo", "Oscilación V.", "Ratio V."}
 
-    if bike_c: styler = styler.background_gradient(subset=bike_c, cmap="Blues",   axis=0)
-    if run_c:  styler = styler.background_gradient(subset=run_c,  cmap="Greens",  axis=0)
-    if swim_c: styler = styler.background_gradient(subset=swim_c, cmap="Purples", axis=0)
-    if step_c: styler = styler.background_gradient(subset=step_c, cmap="Oranges", axis=0)
+    _BASE_CMAP = {"🚴": "Blues", "🏃": "Greens", "🏊": "Purples", "👣": "Oranges"}
+
+    for col in tbl.columns:
+        base = next((c for e, c in _BASE_CMAP.items() if e in col), None)
+        if base is None:
+            continue
+        reversed_ = any(k in col for k in _LOWER_BETTER)
+        styler = styler.background_gradient(
+            subset=[col], cmap=f"{base}_r" if reversed_ else base, axis=0
+        )
 
     st.dataframe(styler, use_container_width=True)
 
