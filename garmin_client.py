@@ -94,9 +94,10 @@ class GarminClient:
             "hrZ5Min": _zone_min("hrTimeInZone_5"),
         }
 
-    def get_cycling_activities(self, start_date: str, end_date: str) -> dict:
-        raw = self._api.get_activities_by_date(start_date, end_date, activitytype="cycling")
-        acts = sorted([self._norm(a) for a in raw], key=lambda x: x["date"])
+    def _get_all_cycling_raw(self, start_date: str, end_date: str) -> list:
+        return self._api.get_activities_by_date(start_date, end_date, activitytype="cycling")
+
+    def _cycling_summary(self, acts: list) -> dict:
         total_dist = round(sum(a["distanceKm"] for a in acts), 2)
         total_time = round(sum(a["durationMin"] for a in acts), 1)
         total_elev = round(sum(a["elevationGainM"] for a in acts), 0)
@@ -111,6 +112,24 @@ class GarminClient:
                 "avgSpeedKmh": avg_spd,
             },
         }
+
+    def get_cycling_activities(self, start_date: str, end_date: str) -> dict:
+        raw = self._get_all_cycling_raw(start_date, end_date)
+        acts = sorted(
+            [self._norm(a) for a in raw
+             if (a.get("activityType") or {}).get("typeKey", "") == "cycling"],
+            key=lambda x: x["date"],
+        )
+        return self._cycling_summary(acts)
+
+    def get_mtb_activities(self, start_date: str, end_date: str) -> dict:
+        raw = self._get_all_cycling_raw(start_date, end_date)
+        acts = sorted(
+            [self._norm(a) for a in raw
+             if (a.get("activityType") or {}).get("typeKey", "") == "mountain_biking"],
+            key=lambda x: x["date"],
+        )
+        return self._cycling_summary(acts)
 
     def get_running_activities(self, start_date: str, end_date: str) -> dict:
         raw = self._api.get_activities_by_date(start_date, end_date, activitytype="running")
